@@ -1,37 +1,87 @@
-const dotenv = require('dotenv');
-const express = require('express');
-const cors = require('cors');
-const { sequelize } = require('../db');
-const md = require('../models/User');
-
-// Load environment variables
-dotenv.config();
+// app.js
+const express = require("express");
+const cors = require("cors");
+const bodyParser = require("body-parser");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const { Pool } = require("pg");
+require("dotenv").config();
 
 const app = express();
+const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 
-// Sync models with database
-md.sequelize.sync({ alter: true });
-
-// Middleware
+// Middlewares
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(bodyParser.json());
 
-// Health check / test route
-app.get('/api/test', (req, res) => {
-  res.json({ message: 'Backend is connected successfully!' });
+// PostgreSQL connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
 });
 
-// User Routes
-const userRoutes = require('../routes/userRoute');
-app.use('/api/users', userRoutes);
+// Test route
+app.get("/api/test", (req, res) => {
+  res.json({ message: "Backend is running with PostgreSQL!" });
+});
 
-// Job Routes
-const jobRoutes = require('../routes/jobRoute');
-app.use('/api/jobs', jobRoutes);
+// Signup route
+app.post("/api/signup", async (req, res) => {
+  const { name, email, password } = req.body;
 
-// Chat Routes
-const chatRoutes = require('../routes/chatRoute');
-app.use('/api/chat', chatRoutes);
+  try {
+    // check if email exists
+    const userCheck = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    if (userCheck.rows.length > 0) {
+      return res.status(400).json({ message: "User already exists" });
+    }
 
-module.exports = app;
+    // hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // insert into DB
+    const newUser = await pool.query(
+      "INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email",
+      [name, email, hashedPassword]
+    );
+
+    res.json({ message: "User registered successfully", user: newUser.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Signin route
+app.post("/api/signin", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    // find user
+    const user = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    if (user.rows.length === 0) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    // check password
+    const validPassword = await bcrypt.compare(password, user.rows[0].password);
+    if (!validPassword) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    // generate JWT
+    const token = jwt.sign(
+      { id: user.rows[0].id, email: user.rows[0].email },
+      JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    res.json({ message: "Login successful", token, user: { id: user.rows[0].id, email: user.rows[0].email, name: user.rows[0].name } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
