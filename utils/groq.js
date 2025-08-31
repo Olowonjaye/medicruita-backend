@@ -1,7 +1,6 @@
-const Groq = require("groq-sdk");
-require("dotenv").config();
-const groq_client = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+const { Groq } = require('groq-sdk');
 
-module.exports = groq_client;
+// Initialize Groq client once
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+module.exports = groq;

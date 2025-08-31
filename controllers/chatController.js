@@ -1,21 +1,20 @@
-const medicalChatBot = require("../chat/medicalChatBot");
+const medicalChatBot = require('../chat/medicalChatBot');
 
-const chatController = {
-  async handleMedicalChat(req, res) {
+// Controller for handling medical chat
+exports.handleMedicalChat = async (req, res) => {
+  try {
     const { userQuestion } = req.body;
 
     if (!userQuestion) {
-      return res.status(400).json({ error: "User question is required." });
+      return res.status(400).json({ error: "User question is required" });
     }
 
-    try {
-      const reply = await medicalChatBot(userQuestion);
-      return res.status(200).json({ reply });
-    } catch (error) {
-      console.error("Error in medical chat:", error);
-      return res.status(500).json({ error: "An error occurred while processing your request." });
-    }
-  },
+    // Pass question to chatbot service
+    const botReply = await medicalChatBot.getMedicalResponse(userQuestion);
+
+    res.json({ reply: botReply });
+  } catch (error) {
+    console.error("ChatController Error:", error.message);
+    res.status(500).json({ error: "Failed to process request" });
+  }
 };
-
-module.exports = chatController;
