@@ -37,9 +37,8 @@ app.get("/", (req, res) => {
 // --- GROQ SETUP ---
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-// Chat with Groq model
+// Chat route
 app.post("/api/chat", async (req, res) => {
-  // Accept either `userQuestion` (from frontend) or `message`
   const userMessage = req.body.userQuestion || req.body.message;
 
   if (!userMessage) {
@@ -52,17 +51,17 @@ app.post("/api/chat", async (req, res) => {
         { role: "system", content: "You are Chatilama, a helpful assistant." },
         { role: "user", content: userMessage },
       ],
-      model: "llama-3.1-70b-versatile", // options: llama-3.1-8b-instant, llama-3.1-70b-versatile
+      model: "llama-3.1-70b-versatile",
     });
 
-    res.json({ reply: chatCompletion.choices[0].message.content });
+    const reply = chatCompletion.choices?.[0]?.message?.content || "No reply received.";
+
+    res.json({ reply });
   } catch (error) {
-    console.error("Groq error:", error);
+    console.error("Groq error:", error.response?.data || error.message);
     res.status(500).json({ message: "Error communicating with Groq API" });
   }
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-});
+// Export app (so server.js runs it)
+module.exports = app;
