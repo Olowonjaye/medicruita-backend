@@ -1,88 +1,68 @@
 // app.js
+const dotenv = require("dotenv");
 const express = require("express");
 const cors = require("cors");
-const bodyParser = require("body-parser");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const { Pool } = require("pg");
-require("dotenv").config();
+const { sequelize } = require("../db");
+const md = require("../models/User");
+const userRoute = require("../routes/userRoute");
+const Groq = require("groq-sdk");
+
+dotenv.config();
 
 const app = express();
-const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
+const PORT = process.env.PORT || 5000;
 
 // Middlewares
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 
-// PostgreSQL connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+// Connect DB
+sequelize
+  .sync()
+  .then(() => {
+    console.log("Database connected successfully");
+  })
+  .catch((err) => {
+    console.error("Unable to connect to DB:", err);
+  });
+
+// Routes
+app.use("/api", userRoute);
+
+// Default route
+app.get("/", (req, res) => {
+  res.json({ message: "Welcome to Chatilama API" });
 });
 
-// Test route
-app.get("/api/test", (req, res) => {
-  res.json({ message: "Backend is running with PostgreSQL!" });
-});
+// --- GROQ SETUP ---
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-// Signup route
-app.post("/api/signup", async (req, res) => {
-  const { name, email, password } = req.body;
+// Chat with Groq model
+app.post("/api/chat", async (req, res) => {
+  // Accept either `userQuestion` (from frontend) or `message`
+  const userMessage = req.body.userQuestion || req.body.message;
 
-  try {
-    const userCheck = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-    if (userCheck.rows.length > 0) {
-      return res.status(400).json({ message: "User already exists" });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const newUser = await pool.query(
-      "INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email",
-      [name, email, hashedPassword]
-    );
-
-    res.json({ message: "User registered successfully", user: newUser.rows[0] });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+  if (!userMessage) {
+    return res.status(400).json({ message: "Message is required" });
   }
-});
-
-// Signin route
-app.post("/api/signin", async (req, res) => {
-  const { email, password } = req.body;
 
   try {
-    const user = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-    if (user.rows.length === 0) {
-      return res.status(400).json({ message: "Invalid email or password" });
-    }
-
-    const validPassword = await bcrypt.compare(password, user.rows[0].password);
-    if (!validPassword) {
-      return res.status(400).json({ message: "Invalid email or password" });
-    }
-
-    const token = jwt.sign(
-      { id: user.rows[0].id, email: user.rows[0].email },
-      JWT_SECRET,
-      { expiresIn: "1h" }
-    );
-
-    res.json({
-      message: "Login successful",
-      token,
-      user: {
-        id: user.rows[0].id,
-        email: user.rows[0].email,
-        name: user.rows[0].name,
-      },
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        { role: "system", content: "You are Chatilama, a helpful assistant." },
+        { role: "user", content: userMessage },
+      ],
+      model: "llama-3.1-70b-versatile", // options: llama-3.1-8b-instant, llama-3.1-70b-versatile
     });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+
+    res.json({ reply: chatCompletion.choices[0].message.content });
+  } catch (error) {
+    console.error("Groq error:", error);
+    res.status(500).json({ message: "Error communicating with Groq API" });
   }
 });
 
-module.exports = app;
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+});
