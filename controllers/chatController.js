@@ -1,16 +1,15 @@
-const medicalChatBot = require('../chat/medicalChatBot');
+const { getMedicalResponse } = require('../chat/medicalChatBot');
 
 // Controller for handling medical chat
 exports.handleMedicalChat = async (req, res) => {
   try {
-    const { userQuestion } = req.body;
+    const { sessionId, userQuestion } = req.body;
 
-    if (!userQuestion) {
-      return res.status(400).json({ error: "User question is required" });
+    if (!sessionId || !userQuestion) {
+      return res.status(400).json({ error: "sessionId and userQuestion are required" });
     }
 
-    // Pass question to chatbot service
-    const botReply = await medicalChatBot.getMedicalResponse(userQuestion);
+    const botReply = await getMedicalResponse(sessionId, userQuestion);
 
     res.json({ reply: botReply });
   } catch (error) {
