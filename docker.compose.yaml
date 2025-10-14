@@ -1,0 +1,17 @@
+services:
+  generalsql-db:
+    image: postgres
+    container_name: hackathon-Db
+    ports:
+      - "5449:5432"
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=hackathondb
+
+volumes:
+  postgres_data:
+    driver: local
