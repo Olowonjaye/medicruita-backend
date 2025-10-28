@@ -34,17 +34,27 @@ Guidelines:
   chatHistories[sessionId].push({ role: "user", content: message });
 
   // Call Groq API with history
-  const completion = await groq.chat.completions.create({
-    model: "llama3-8b-8192",
-    messages: chatHistories[sessionId],
-  });
+  try {
+    const completion = await groq.chat.completions.create({
+      model: "llama3-8b-8192",
+      messages: chatHistories[sessionId],
+    });
 
-  const reply = completion.choices[0].message.content.trim();
+    const reply = completion.choices?.[0]?.message?.content?.trim() || "";
 
-  // Add assistant reply to history
-  chatHistories[sessionId].push({ role: "assistant", content: reply });
+    // Add assistant reply to history
+    chatHistories[sessionId].push({ role: "assistant", content: reply });
 
-  return reply;
+    return { reply, history: chatHistories[sessionId] };
+  } catch (err) {
+    // Log the full error for server-side debugging
+    console.error("Groq API error:", err && err.stack ? err.stack : err);
+
+    // Fallback reply to avoid returning 500 to the client
+    const fallback = "I'm having trouble connecting to the assistant right now. Please try again later.";
+    chatHistories[sessionId].push({ role: "assistant", content: fallback });
+    return { reply: fallback, history: chatHistories[sessionId] };
+  }
 }
 
 module.exports = { getMedicalResponse };

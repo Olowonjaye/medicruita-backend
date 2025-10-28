@@ -1,4 +1,9 @@
+#.env should not be committed
 .env
+node_modules
+dist
+logs
+*.log.env
 /node_modules
 /exports
 package-lock.json

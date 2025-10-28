@@ -15,14 +15,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Connect DB
-sequelize
-  .sync()
+// Connect DB (authenticate and sync). Use connectDb to surface errors clearly.
+const { connectDb } = require("../db");
+
+connectDb({ sync: true })
   .then(() => {
-    console.log("✅ Database connected successfully");
+    console.log("✅ Database connected and synced successfully");
   })
   .catch((err) => {
     console.error("❌ Unable to connect to DB:", err);
+    // Optional: exit process if DB is critical
+    // process.exit(1);
   });
 
 // Routes
