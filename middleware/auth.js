@@ -2,7 +2,10 @@ const jwt = require('jsonwebtoken');
 
 const verifyToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+  if (!authHeader?.startsWith('Bearer ')) {
+    console.warn(`[auth] Missing or malformed Authorization header for ${req.method} ${req.originalUrl}`);
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
   const token = authHeader.split(' ')[1];
   try {
@@ -10,6 +13,7 @@ const verifyToken = (req, res, next) => {
     req.user = decoded; // { id, role }
     next();
   } catch (err) {
+    console.warn(`[auth] Invalid/expired token for ${req.method} ${req.originalUrl}: ${err.message}`);
     res.status(403).json({ error: 'Invalid or expired token' });
   }
 };
