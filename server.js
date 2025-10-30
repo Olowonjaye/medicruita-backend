@@ -18,6 +18,11 @@ app.use((req, res, next) => {
 	next();
 });
 
+// Quick health endpoint to verify which process is responding on the port
+app.get('/ping', (req, res) => {
+    res.json({ ok: true, pid: process.pid, time: Date.now() });
+});
+
 // Mount ChatLlama proxy (no auth by default; add verifyToken if you want it protected)
 app.use('/api', chatLlamaRoute);
 

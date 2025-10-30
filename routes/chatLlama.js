@@ -83,7 +83,13 @@ const inFlight = new Map();
 
 async function performGroqCall(groqUrl, outgoing) {
 	const fetch = getFetch();
+	// Use AbortController to enforce a timeout for external API calls
+	const controller = new AbortController();
+	const timeoutMs = Number(process.env.GROQ_REQUEST_TIMEOUT_MS || 30000);
+	const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
 	try {
+		console.info('[performGroqCall] groqUrl=', groqUrl, 'outgoingSnippet=', JSON.stringify(outgoing).slice(0,400));
 		const resp = await fetch(groqUrl, {
 			method: 'POST',
 			headers: {
@@ -92,10 +98,20 @@ async function performGroqCall(groqUrl, outgoing) {
 				'Accept': 'application/json, text/event-stream, */*',
 			},
 			body: JSON.stringify(outgoing),
+			signal: controller.signal,
 		});
+
+		clearTimeout(timeout);
 
 		const status = resp.status || 500;
 		const text = await resp.text();
+
+		// Log non-OK responses to help debug 502/4xx/5xx
+		if (!resp.ok) {
+			console.error('[performGroqCall] Groq responded with error', { status, textSnippet: (text||'').slice(0,800) });
+			return { status, reply: null, raw: text, error: `Groq returned status ${status}` };
+		}
+
 		let parsed = null;
 		let reply = null;
 
@@ -111,13 +127,18 @@ async function performGroqCall(groqUrl, outgoing) {
 		// Always return structured result
 		return { status, reply, raw: parsed ?? text };
 	} catch (err) {
-		// Network/fetch failure
-		return { status: 502, reply: null, raw: null, error: String(err.message || err) };
+		clearTimeout(timeout);
+		if (err && err.name === 'AbortError') {
+			console.error('[performGroqCall] Request to Groq aborted due to timeout', { timeoutMs });
+			return { status: 504, reply: null, raw: null, error: 'timeout' };
+		}
+		console.error('[performGroqCall] Network/fetch failure', err && err.message ? err.message : err);
+		return { status: 502, reply: null, raw: null, error: String(err && err.message ? err.message : err) };
 	}
 }
 
-// POST /api/chatllama
-router.post('/chatllama', async (req, res) => {
+// Core handler shared by both /chatllama and /chat (alias)
+const chatHandler = async (req, res) => {
 	// Log incoming request once
 	const incomingId = req.headers['x-request-id'] || req.body?.requestId || null;
 	const payloadSignature = (() => {
@@ -140,16 +161,25 @@ router.post('/chatllama', async (req, res) => {
 
 	// Validate body presence
 	const body = req.body || {};
+	// Accept several incoming shapes for the user content to be forgiving of different clients
+	const userQuestion = (typeof body.userQuestion === 'string' && body.userQuestion.trim())
+		|| (typeof body.user_question === 'string' && body.user_question.trim())
+		|| (typeof body.input === 'string' && body.input.trim())
+		|| (typeof body.prompt === 'string' && body.prompt.trim())
+		|| null;
 	const hasMessages = Array.isArray(body.messages) && body.messages.length > 0;
-	const hasPrompt = typeof body.prompt === 'string' && body.prompt.trim();
-	const hasInput = typeof body.input === 'string' && body.input.trim();
-	if (!hasMessages && !hasPrompt && !hasInput) {
-		console.warn('[chatLlama] Request missing messages/prompt/input');
+	if (!hasMessages && !userQuestion) {
+		console.warn('[chatLlama] Request missing messages/userQuestion/prompt/input');
 		return res.status(400).json({ reply: '', error: 'missing_messages_or_prompt' });
 	}
 
-	// Build outgoing body and groqUrl
+	// Build outgoing body and groqUrl. Normalize to a `messages` array if only a single userQuestion provided.
 	const outgoing = { ...body };
+	if (!outgoing.messages || !Array.isArray(outgoing.messages) || outgoing.messages.length === 0) {
+		if (userQuestion) {
+			outgoing.messages = [{ role: 'user', content: userQuestion }];
+		}
+	}
 	if (!outgoing.model) outgoing.model = 'llama3-8b-8192';
 	let groqUrl = process.env.GROQ_API_URL || 'https://api.groq.com/openai/v1/chat/completions';
 	if (!/\/chat\/?completions$/i.test(groqUrl) && !/\/chat\.completions$/i.test(groqUrl)) {
@@ -207,6 +237,16 @@ router.post('/chatllama', async (req, res) => {
 		console.error('[chatLlama] Unhandled error while processing request:', err);
 		return res.status(500).json({ reply: '', error: 'internal_error', detail: String(err.message || err) });
 	}
+};
+
+// POST /api/chatllama
+router.post('/chatllama', chatHandler);
+
+// Backwards-compatible alias: POST /api/chat
+// Some older frontend code may still call /api/chat — accept it and forward to same handler.
+router.post('/chat', (req, res) => {
+	console.warn('[chatLlama] Received request to deprecated /api/chat — handling with chatHandler');
+	return chatHandler(req, res);
 });
 
 module.exports = router;
