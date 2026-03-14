@@ -4,7 +4,7 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const ensureJsonResponse = require('./middleware/ensureJsonResponse');
-const chatLlamaRoute = require('./routes/chatLlama');
+const geminiRoute = require('./routes/gemini');
 
 const app = express();
 
@@ -23,8 +23,14 @@ app.get('/ping', (req, res) => {
     res.json({ ok: true, pid: process.pid, time: Date.now() });
 });
 
-// Mount ChatLlama proxy (no auth by default; add verifyToken if you want it protected)
-app.use('/api', chatLlamaRoute);
+// Mount Gemini proxy (no auth by default; add verifyToken if you want it protected)
+app.use('/api/gemini', geminiRoute);
+
+// User routes (register/login/me)
+const userRoute = require('./routes/userRoute');
+// Mount under both /api and /api/user to accept either client style
+app.use('/api', userRoute);
+app.use('/api/user', userRoute);
 
 // Basic error handler
 app.use((err, req, res, next) => {

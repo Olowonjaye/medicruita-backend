@@ -25,7 +25,7 @@ module.exports = function ensureJsonResponse(req, res, next) {
 			// Not valid JSON — wrap it so frontend can always parse
 			res.type('application/json');
 			const wrapped = { raw: (typeof body === 'string' ? body : String(body)) };
-			// Short log to help debugging chatllama non-replies
+			// Short log to help debugging non-JSON responses from AI endpoints
 			if (!res.headersSent) {
 				console.warn(`[ensureJsonResponse] Wrapped non-JSON response for ${req.method} ${req.originalUrl}`);
 			}

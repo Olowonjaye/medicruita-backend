@@ -1,58 +1,41 @@
-const groq = require('../utils/groq');
+const { sendToGemini } = require('../lib/geminiClient');
 
 // Temporary in-memory session storage (replace with Redis/DB in production)
 const chatHistories = {};
 
 /**
- * Service function for handling medical questions
+ * Service function for handling medical questions using Gemini
  */
 async function getMedicalResponse(sessionId, message) {
   if (!sessionId || !message) {
-    throw new Error("sessionId and message are required.");
+    throw new Error('sessionId and message are required.');
   }
 
   // Initialize history if not exists
   if (!chatHistories[sessionId]) {
     chatHistories[sessionId] = [
       {
-        role: "system",
-        content: `
-You are Chatllama, a professional and friendly **medical assistant AI**. 
-You answer medical questions in a clear, concise, and informative way.
-
-Guidelines:
-- Keep responses easy to understand.
-- Be neutral and factual.
-- Do NOT provide personal opinions.
-- If unsure, say: "It's best to consult a healthcare provider."
-        `.trim(),
+        role: 'system',
+        content: `You are a professional and friendly medical assistant. Answer clearly, concisely, and factually. If unsure, recommend consulting a healthcare provider.`,
       },
     ];
   }
 
   // Add user message to history
-  chatHistories[sessionId].push({ role: "user", content: message });
+  chatHistories[sessionId].push({ role: 'user', content: message });
 
-  // Call Groq API with history
   try {
-    const completion = await groq.chat.completions.create({
-      model: "llama3-8b-8192",
-      messages: chatHistories[sessionId],
-    });
-
-    const reply = completion.choices?.[0]?.message?.content?.trim() || "";
+    const result = await sendToGemini({ messages: chatHistories[sessionId], timeoutMs: 20000 });
+    const reply = (result && result.reply) ? String(result.reply).trim() : '';
 
     // Add assistant reply to history
-    chatHistories[sessionId].push({ role: "assistant", content: reply });
+    chatHistories[sessionId].push({ role: 'assistant', content: reply });
 
     return { reply, history: chatHistories[sessionId] };
   } catch (err) {
-    // Log the full error for server-side debugging
-    console.error("Groq API error:", err && err.stack ? err.stack : err);
-
-    // Fallback reply to avoid returning 500 to the client
+    console.error('Gemini API error:', err && err.stack ? err.stack : err);
     const fallback = "I'm having trouble connecting to the assistant right now. Please try again later.";
-    chatHistories[sessionId].push({ role: "assistant", content: fallback });
+    chatHistories[sessionId].push({ role: 'assistant', content: fallback });
     return { reply: fallback, history: chatHistories[sessionId] };
   }
 }

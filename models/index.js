@@ -1,6 +1,8 @@
 const { sequelize } = require('../db');
 const User = require('./User');
 const Job = require('./Job');
+const Project = require('./Project');
+const Verification = require('./Verification');
 // const UserProfile = require('./UserProfile');
 // const Education = require('./Education');
 // const Experience = require('./Experience');
@@ -28,10 +30,16 @@ User.hasMany(Job, {
     foreignKey: 'userId',
   });
 
+  // Project associations
+  Project.hasMany(Verification, { foreignKey: 'projectId', onDelete: 'CASCADE' });
+  Verification.belongsTo(Project, { foreignKey: 'projectId' });
+
 module.exports = {
     sequelize,
     User,
     Job,
+    Project,
+    Verification,
   // UserProfile,
   // Education,
   // Experience,

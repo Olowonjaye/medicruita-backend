@@ -1,17 +1,16 @@
 #!/usr/bin/env node
-// Simple Node script to POST a sample payload to /api/chatllama and print the response.
+// Simple Node script to POST a sample payload to /api/gemini and print the response.
 // Usage: node backend/scripts/testChat.js [baseUrl]
 
 const DEFAULT_BASE = process.env.API_BASE || process.argv[2] || 'http://localhost:5000';
 
 async function main() {
   const base = DEFAULT_BASE.replace(/\/+$/, '');
-  const url = `${base}/api/chatllama`;
+  const url = `${base}/api/gemini`;
 
   const payload = {
     sessionId: 'test-session-' + Date.now(),
-    userQuestion: 'Hello — please respond with a short test message',
-    model: 'llama3-8b-8192'
+    messages: [{ role: 'user', content: 'Hello — please respond with a short test message' }]
   };
 
   console.log('POST', url);

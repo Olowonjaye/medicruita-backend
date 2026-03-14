@@ -25,6 +25,7 @@ RUN if [ -f package-lock.json ]; then \
 # Copy application source
 COPY . .
 
+
 # --- Runtime stage ---
 FROM node:18-bullseye-slim
 WORKDIR /app
